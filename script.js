@@ -16,7 +16,6 @@ const CONFIG = {
     },
     CURVES_COUNT: 3,
     MIN_DEPTH_FOR_SPLATS: 2,
-    BASE_WIDTH: 12,
     WIDTH_DECAY: 0.7
   },
   SPLATTER: {
@@ -59,7 +58,8 @@ let cachedValues = {
   inkColor: [0, 0, 0],
   leafChar: '林',
   windStrength: 0,
-  windSpeed: 5
+  windSpeed: 5,
+  branchThickness: 12
 };
 
 // Helper function to convert hex to RGB
@@ -96,6 +96,7 @@ function updateCachedValues() {
   cachedValues.leafChar = controls.leafChar.value;
   cachedValues.windStrength = parseInt(controls.windStrength.value);
   cachedValues.windSpeed = parseInt(controls.windSpeed.value);
+  cachedValues.branchThickness = parseInt(controls.branchThickness.value);
 }
 
 // Helper function to generate unique branch parameters
@@ -156,6 +157,7 @@ function setup() {
     depth: document.getElementById("depth"),
     initialLength: document.getElementById("initialLength"),
     branchAngle: document.getElementById("branchAngle"),
+    branchThickness: document.getElementById("branchThickness"),
     randomness: document.getElementById("randomness"),
     growthSpeed: document.getElementById("growthSpeed"),
     leafColor: document.getElementById("leafColor"),
@@ -187,6 +189,7 @@ function setup() {
       element.addEventListener("input", () => {
         valueDisplay.textContent = element.value;
         updateCachedValues();
+        redrawTree();
       });
     }
   });
@@ -252,8 +255,8 @@ function drawBranch(x, y, len, angle, depth, width, progress, branchIndex = 0) {
   push();
   translate(x, y);
 
-  // Calculate base width with depth-based scaling
-  const baseWidth = CONFIG.BRANCH.BASE_WIDTH * pow(CONFIG.BRANCH.WIDTH_DECAY, depth);
+  // Calculate base width with inverted depth-based scaling to make branches thinner towards tips
+  const baseWidth = cachedValues.branchThickness * pow(CONFIG.BRANCH.WIDTH_DECAY, cachedValues.maxDepth - depth);
 
   // Add ink texture effect using pre-calculated parameters
   const [inkR, inkG, inkB] = cachedValues.inkColor;
@@ -356,7 +359,7 @@ function redrawTree() {
     parseInt(controls.initialLength.value),
     PI / 2,
     cachedValues.maxDepth,
-    CONFIG.BRANCH.BASE_WIDTH,
+    cachedValues.branchThickness,
     growthProgress
   );
 }

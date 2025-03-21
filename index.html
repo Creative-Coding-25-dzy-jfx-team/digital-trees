@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>P5.js Chinese Ink Tree</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@100..900&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: #f5f5f5;
+        }
+        #controls {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        .control-group {
+            margin-bottom: 10px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <div class="control-group">
+            <label for="depth">Tree Depth: <span id="depthValue">8</span></label>
+            <input type="range" id="depth" min="4" max="12" value="8">
+        </div>
+        <div class="control-group">
+            <label for="initialLength">Initial Length: <span id="lengthValue">120</span></label>
+            <input type="range" id="initialLength" min="60" max="200" value="120">
+        </div>
+        <div class="control-group">
+            <label for="branchAngle">Branch Angle: <span id="angleValue">25</span>°</label>
+            <input type="range" id="branchAngle" min="10" max="45" value="25">
+        </div>
+        <div class="control-group">
+            <label for="randomness">Randomness: <span id="randomValue">5</span></label>
+            <input type="range" id="randomness" min="0" max="10" value="5">
+        </div>
+        <button onclick="redrawTree()">Redraw Tree</button>
+    </div>
+
+    <script>
+        let controls;
+        let chineseFont;
+        
+        function setup() {
+            createCanvas(windowWidth * 0.8, windowHeight * 0.8);
+            textFont('Noto Sans SC', 16);
+            
+            controls = {
+                depth: document.getElementById('depth'),
+                initialLength: document.getElementById('initialLength'),
+                branchAngle: document.getElementById('branchAngle'),
+                randomness: document.getElementById('randomness')
+            };
+
+            // Update value displays
+            Object.keys(controls).forEach(key => {
+                const element = controls[key];
+                const valueDisplay = document.getElementById(key + 'Value');
+                element.addEventListener('input', () => {
+                    valueDisplay.textContent = element.value;
+                });
+            });
+
+            redrawTree();
+        }
+
+        function windowResized() {
+            resizeCanvas(windowWidth * 0.8, windowHeight * 0.8);
+            redrawTree();
+        }
+
+        function drawBranch(x, y, len, angle, depth, width) {
+            if (depth === 0) {
+                // Draw '林' character at branch ends
+                push();
+                translate(x, y);
+                rotate(-angle);
+                textSize(16);
+                textAlign(CENTER, CENTER);
+                
+                // Draw green shadow for depth effect
+                fill(34, 139, 34, 50);
+                noStroke();
+                text('林', 1, 1);
+                
+                // Draw main character
+                fill(34, 139, 34, 200);
+                text('林', 0, 0);
+                pop();
+                return;
+            }
+
+            const randomFactor = map(parseInt(controls.randomness.value), 0, 10, 0, 1);
+            
+            push();
+            translate(x, y);
+            
+            // Add random ink texture effect
+            for (let i = 0; i < 3; i++) {
+                let branchEndX = len * cos(-angle);
+                let branchEndY = len * sin(-angle);
+                
+                // Random variations for ink effect
+                branchEndX += random(-width * randomFactor, width * randomFactor);
+                branchEndY += random(-width * randomFactor, width * randomFactor);
+
+                // Ink stroke effect
+                stroke(0, random(100, 255));
+                strokeWeight(width * random(0.8, 1.2));
+                
+                // Draw with slight curves for natural look
+                let ctrl1X = random(len * 0.2, len * 0.4);
+                let ctrl1Y = random(-width, width) * randomFactor;
+                let ctrl2X = random(len * 0.6, len * 0.8);
+                let ctrl2Y = random(-width, width) * randomFactor;
+                
+                noFill();
+                bezier(0, 0, 
+                    ctrl1X, ctrl1Y,
+                    ctrl2X, ctrl2Y,
+                    branchEndX, branchEndY);
+
+                // Add ink splatter effect
+                if (depth > 2) {
+                    let numSplats = floor(random(3, 6));
+                    for (let j = 0; j < numSplats; j++) {
+                        let splatterX = random(0, len);
+                        let splatterY = random(-width, width) * randomFactor;
+                        stroke(0, random(50, 150));
+                        strokeWeight(random(1, 2));
+                        point(splatterX, splatterY);
+                    }
+                }
+            }
+
+            // Calculate next branches
+            let newLen = len * random(0.65, 0.75);
+            let newWidth = width * 0.7;
+            let branchAngle = radians(parseInt(controls.branchAngle.value));
+            
+            // Random angle variations
+            let leftAngle = angle + branchAngle + random(-0.5, 0.5) * randomFactor;
+            let rightAngle = angle - branchAngle + random(-0.5, 0.5) * randomFactor;
+
+            // Recursively draw branches
+            translate(len * cos(-angle), len * sin(-angle));
+            drawBranch(0, 0, newLen, leftAngle, depth - 1, newWidth);
+            drawBranch(0, 0, newLen, rightAngle, depth - 1, newWidth);
+            
+            pop();
+        }
+
+        function redrawTree() {
+            background(255);
+            
+            // Draw ground texture
+            stroke(0, 30);
+            for (let i = 0; i < width; i += 20) {
+                let y = height * 0.8 + random(-5, 5);
+                strokeWeight(random(0.5, 2));
+                line(i, y, i + random(10, 30), y + random(-5, 5));
+            }
+
+            // Draw main tree
+            drawBranch(
+                width / 2, 
+                height * 0.8,
+                parseInt(controls.initialLength.value),
+                PI/2,
+                parseInt(controls.depth.value),
+                10
+            );
+        }
+    </script>
+</body>
+</html>

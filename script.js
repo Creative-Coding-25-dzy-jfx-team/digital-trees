@@ -15,7 +15,9 @@ const CONFIG = {
       SECOND: { MIN: 0.6, MAX: 0.8 }
     },
     CURVES_COUNT: 3,
-    MIN_DEPTH_FOR_SPLATS: 2
+    MIN_DEPTH_FOR_SPLATS: 2,
+    BASE_WIDTH: 12,
+    WIDTH_DECAY: 0.7
   },
   SPLATTER: {
     COUNT: { MIN: 3, MAX: 6 },
@@ -34,6 +36,11 @@ const CONFIG = {
     SPEED_FACTOR: 0.001,
     CHILD_DELAY: 0.1,
     CHILD_SCALE: 1.2
+  },
+  WIND: {
+    ANGLE_FACTOR: 0.02,
+    TIME_SCALE: 0.001,
+    BASE_FREQUENCY: 0.5
   }
 };
 
@@ -43,13 +50,16 @@ let growthProgress = 0;
 let isGrowing = false;
 let treeSeed;
 let branchParams = [];
+let windTime = 0;
 let cachedValues = {
   randomness: 0,
   branchAngle: 0,
   maxDepth: 0,
   leafColor: [34, 139, 34],
   inkColor: [0, 0, 0],
-  leafChar: '林'
+  leafChar: '林',
+  windStrength: 0,
+  windSpeed: 5
 };
 
 // Helper function to convert hex to RGB
@@ -68,6 +78,14 @@ function saveAsImage() {
   saveCanvas(`chinese-ink-tree-${timestamp}`, 'png');
 }
 
+// Function to calculate wind effect
+function calculateWindEffect(depth, time) {
+  const windStrength = cachedValues.windStrength * CONFIG.WIND.ANGLE_FACTOR;
+  const frequency = CONFIG.WIND.BASE_FREQUENCY * cachedValues.windSpeed;
+  const phase = depth * 0.5; // Different phase for each depth level
+  return sin(time * frequency + phase) * windStrength * (1 - depth / cachedValues.maxDepth);
+}
+
 // Update cached values for performance
 function updateCachedValues() {
   cachedValues.randomness = map(parseInt(controls.randomness.value), 0, 10, 0, 1);
@@ -76,6 +94,8 @@ function updateCachedValues() {
   cachedValues.leafColor = hexToRgb(controls.leafColor.value);
   cachedValues.inkColor = hexToRgb(controls.inkColor.value);
   cachedValues.leafChar = controls.leafChar.value;
+  cachedValues.windStrength = parseInt(controls.windStrength.value);
+  cachedValues.windSpeed = parseInt(controls.windSpeed.value);
 }
 
 // Helper function to generate unique branch parameters
@@ -140,7 +160,9 @@ function setup() {
     growthSpeed: document.getElementById("growthSpeed"),
     leafColor: document.getElementById("leafColor"),
     inkColor: document.getElementById("inkColor"),
-    leafChar: document.getElementById("leafChar")
+    leafChar: document.getElementById("leafChar"),
+    windStrength: document.getElementById("windStrength"),
+    windSpeed: document.getElementById("windSpeed")
   };
 
   // Validate controls existence
@@ -150,14 +172,14 @@ function setup() {
       return;
     }
     
-    // Special handling for color inputs and character select
+    // Special handling for color inputs and select
     if (key === 'leafColor' || key === 'inkColor' || key === 'leafChar') {
       element.addEventListener("input", () => {
         updateCachedValues();
         redrawTree();
       });
     } else {
-      const valueDisplay = document.getElementById(key + "Value");
+      const valueDisplay = document.getElementById(key.replace('Speed', 'Value').replace('Strength', 'Value'));
       if (!valueDisplay) {
         console.error(`Value display for '${key}' not found!`);
         return;
@@ -184,6 +206,10 @@ function drawBranch(x, y, len, angle, depth, width, progress, branchIndex = 0) {
   len = len * min(1, progress);
   width = width * min(1, progress);
 
+  // Apply wind effect
+  const windAngle = calculateWindEffect(depth, windTime);
+  angle += windAngle;
+
   if (depth === 0 || !branchParams[depth] || branchIndex >= branchParams[depth].length) {
     // Draw character at branch ends with gradual growth
     if (progress > CONFIG.LEAF.SHOW_THRESHOLD) {
@@ -205,6 +231,9 @@ function drawBranch(x, y, len, angle, depth, width, progress, branchIndex = 0) {
         let shadowAlpha = CONFIG.LEAF.SHADOW_ALPHA * leafProgress;
         let mainAlpha = CONFIG.LEAF.MAIN_ALPHA * leafProgress;
 
+        // Apply wind effect to characters
+        rotate(windAngle * 0.5); // Reduced effect for leaves
+
         // Draw shadow for depth effect
         fill(r, g, b, shadowAlpha);
         noStroke();
@@ -223,6 +252,9 @@ function drawBranch(x, y, len, angle, depth, width, progress, branchIndex = 0) {
   push();
   translate(x, y);
 
+  // Calculate base width with depth-based scaling
+  const baseWidth = CONFIG.BRANCH.BASE_WIDTH * pow(CONFIG.BRANCH.WIDTH_DECAY, depth);
+
   // Add ink texture effect using pre-calculated parameters
   const [inkR, inkG, inkB] = cachedValues.inkColor;
   
@@ -231,16 +263,16 @@ function drawBranch(x, y, len, angle, depth, width, progress, branchIndex = 0) {
     let branchEndX = len * cos(-angle);
     let branchEndY = len * sin(-angle);
 
-    branchEndX += width * curve.endX;
-    branchEndY += width * curve.endY;
+    branchEndX += baseWidth * curve.endX;
+    branchEndY += baseWidth * curve.endY;
 
     stroke(inkR, inkG, inkB, curve.alpha);
-    strokeWeight(width * random(0.8, 1.2));
+    strokeWeight(baseWidth * random(0.8, 1.2));
 
     let ctrl1X = len * curve.ctrl1X;
-    let ctrl1Y = width * curve.ctrl1Y;
+    let ctrl1Y = baseWidth * curve.ctrl1Y;
     let ctrl2X = len * curve.ctrl2X;
-    let ctrl2Y = width * curve.ctrl2Y;
+    let ctrl2Y = baseWidth * curve.ctrl2Y;
 
     noFill();
     bezier(0, 0, ctrl1X, ctrl1Y, ctrl2X, ctrl2Y, branchEndX, branchEndY);
@@ -250,12 +282,12 @@ function drawBranch(x, y, len, angle, depth, width, progress, branchIndex = 0) {
   params.splats.forEach((splat) => {
     stroke(inkR, inkG, inkB, splat.alpha);
     strokeWeight(random(1, 2));
-    point(len * splat.x, width * splat.y);
+    point(len * splat.x, baseWidth * splat.y);
   });
 
   // Calculate next branches using pre-calculated parameters
   let newLen = len * params.length;
-  let newWidth = width * params.width;
+  let newWidth = baseWidth * params.width;
 
   // Use pre-calculated angle variations
   let leftAngle = angle + cachedValues.branchAngle + params.leftAngle;
@@ -275,12 +307,19 @@ function drawBranch(x, y, len, angle, depth, width, progress, branchIndex = 0) {
 }
 
 function draw() {
+  // Update wind time
+  windTime += CONFIG.WIND.TIME_SCALE * (isGrowing ? 1 : 2);
+
   if (isGrowing) {
     let growthSpeed = parseInt(controls.growthSpeed.value);
     growthProgress = min(1, growthProgress + CONFIG.GROWTH.SPEED_FACTOR * growthSpeed);
     if (growthProgress >= 1) {
       isGrowing = false;
     }
+  }
+  
+  // Always redraw if wind is active
+  if (isGrowing || cachedValues.windStrength > 0) {
     redrawTree();
   }
 }
@@ -317,7 +356,7 @@ function redrawTree() {
     parseInt(controls.initialLength.value),
     PI / 2,
     cachedValues.maxDepth,
-    10,
+    CONFIG.BRANCH.BASE_WIDTH,
     growthProgress
   );
 }

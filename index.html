@@ -21,6 +21,32 @@
         min-height: 100vh;
         background: #f5f5f5;
       }
+      button {
+        padding: 8px 16px;
+        margin: 5px;
+        border: none;
+        border-radius: 4px;
+        background: #4CAF50;
+        color: white;
+        cursor: pointer;
+        transition: background 0.3s;
+      }
+      button:hover {
+        background: #45a049;
+      }
+      .color-picker {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      input[type="color"] {
+        width: 40px;
+        height: 40px;
+        padding: 0;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+      }
       #controls {
         position: fixed;
         top: 20px;
@@ -70,8 +96,29 @@
         <input type="range" id="growthSpeed" min="1" max="10" value="5" />
       </div>
       <div class="control-group">
+        <label for="leafChar">Tree Character:</label>
+        <select id="leafChar">
+          <option value="木">木 (Tree)</option>
+          <option value="林" selected>林 (Forest)</option>
+          <option value="森">森 (Dense Forest)</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label for="leafColor">Leaf Color:</label>
+        <div class="color-picker">
+          <input type="color" id="leafColor" value="#228B22" />
+        </div>
+      </div>
+      <div class="control-group">
+        <label for="inkColor">Ink Color:</label>
+        <div class="color-picker">
+          <input type="color" id="inkColor" value="#000000" />
+        </div>
+      </div>
+      <div class="control-group">
         <button onclick="startGrowth()">Start Growth</button>
         <button onclick="resetTree()">Reset</button>
+        <button onclick="saveAsImage()">Save Image</button>
       </div>
     </div>
 

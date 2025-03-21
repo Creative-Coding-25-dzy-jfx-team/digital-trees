@@ -1,38 +1,110 @@
+// Constants for configuration
+const CONFIG = {
+  LEAF: {
+    SHOW_THRESHOLD: 0.1,
+    SIZE: 16,
+    SHADOW_ALPHA: 50,
+    MAIN_ALPHA: 200
+  },
+  BRANCH: {
+    LENGTH_RANGE: { MIN: 0.65, MAX: 0.75 },
+    WIDTH_SCALE: 0.7,
+    ANGLE_VARIATION: { MIN: -0.5, MAX: 0.5 },
+    CONTROL_POINTS: {
+      FIRST: { MIN: 0.2, MAX: 0.4 },
+      SECOND: { MIN: 0.6, MAX: 0.8 }
+    },
+    CURVES_COUNT: 3,
+    MIN_DEPTH_FOR_SPLATS: 2
+  },
+  SPLATTER: {
+    COUNT: { MIN: 3, MAX: 6 },
+    ALPHA: { MIN: 50, MAX: 150 }
+  },
+  CANVAS: {
+    SCALE: 0.8,
+    FRAME_RATE: 60
+  },
+  GROUND: {
+    LINE_SPACING: 20,
+    HEIGHT_RATIO: 0.8,
+    VARIATION: 5
+  },
+  GROWTH: {
+    SPEED_FACTOR: 0.001,
+    CHILD_DELAY: 0.1,
+    CHILD_SCALE: 1.2
+  }
+};
+
+// State management
 let controls;
-let chineseFont;
 let growthProgress = 0;
 let isGrowing = false;
 let treeSeed;
 let branchParams = [];
+let cachedValues = {
+  randomness: 0,
+  branchAngle: 0,
+  maxDepth: 0,
+  leafColor: [34, 139, 34],
+  inkColor: [0, 0, 0],
+  leafChar: '林'
+};
+
+// Helper function to convert hex to RGB
+function hexToRgb(hex) {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return result ? [
+    parseInt(result[1], 16),
+    parseInt(result[2], 16),
+    parseInt(result[3], 16)
+  ] : [0, 0, 0];
+}
+
+// Function to save canvas as image
+function saveAsImage() {
+  const timestamp = new Date().toISOString().replace(/[:]/g, '-').split('.')[0];
+  saveCanvas(`chinese-ink-tree-${timestamp}`, 'png');
+}
+
+// Update cached values for performance
+function updateCachedValues() {
+  cachedValues.randomness = map(parseInt(controls.randomness.value), 0, 10, 0, 1);
+  cachedValues.branchAngle = radians(parseInt(controls.branchAngle.value));
+  cachedValues.maxDepth = parseInt(controls.depth.value);
+  cachedValues.leafColor = hexToRgb(controls.leafColor.value);
+  cachedValues.inkColor = hexToRgb(controls.inkColor.value);
+  cachedValues.leafChar = controls.leafChar.value;
+}
 
 // Helper function to generate unique branch parameters
 function generateBranchParams(depth, randomFactor) {
+  if (depth < 0) return null;
+
   let params = {
-    length: random(0.65, 0.75),
-    width: 0.7,
-    leftAngle: random(-0.5, 0.5) * randomFactor,
-    rightAngle: random(-0.5, 0.5) * randomFactor,
-    curves: Array(3)
-      .fill()
-      .map(() => ({
-        endX: random(-1, 1),
-        endY: random(-1, 1),
-        ctrl1X: random(0.2, 0.4),
-        ctrl1Y: random(-1, 1),
-        ctrl2X: random(0.6, 0.8),
-        ctrl2Y: random(-1, 1),
-        alpha: random(100, 255),
-      })),
-    splats:
-      depth > 2
-        ? Array(floor(random(3, 6)))
-            .fill()
-            .map(() => ({
-              x: random(0, 1),
-              y: random(-1, 1),
-              alpha: random(50, 150),
-            }))
-        : [],
+    length: random(CONFIG.BRANCH.LENGTH_RANGE.MIN, CONFIG.BRANCH.LENGTH_RANGE.MAX),
+    width: CONFIG.BRANCH.WIDTH_SCALE,
+    leftAngle: random(CONFIG.BRANCH.ANGLE_VARIATION.MIN, CONFIG.BRANCH.ANGLE_VARIATION.MAX) * randomFactor,
+    rightAngle: random(CONFIG.BRANCH.ANGLE_VARIATION.MIN, CONFIG.BRANCH.ANGLE_VARIATION.MAX) * randomFactor,
+    curves: Array(CONFIG.BRANCH.CURVES_COUNT).fill().map(() => ({
+      endX: random(-1, 1),
+      endY: random(-1, 1),
+      ctrl1X: random(CONFIG.BRANCH.CONTROL_POINTS.FIRST.MIN, CONFIG.BRANCH.CONTROL_POINTS.FIRST.MAX),
+      ctrl1Y: random(-1, 1),
+      ctrl2X: random(CONFIG.BRANCH.CONTROL_POINTS.SECOND.MIN, CONFIG.BRANCH.CONTROL_POINTS.SECOND.MAX),
+      ctrl2Y: random(-1, 1),
+      alpha: random(100, 255)
+    })),
+    splats: depth > CONFIG.BRANCH.MIN_DEPTH_FOR_SPLATS
+      ? Array(floor(random(CONFIG.SPLATTER.COUNT.MIN, CONFIG.SPLATTER.COUNT.MAX)))
+          .fill()
+          .map(() => ({
+            x: random(0, 1),
+            y: random(-1, 1),
+            alpha: random(CONFIG.SPLATTER.ALPHA.MIN, CONFIG.SPLATTER.ALPHA.MAX)
+          }))
+      : []
   };
   return params;
 }
@@ -41,46 +113,60 @@ function generateBranchParams(depth, randomFactor) {
 function calculateTreeParameters() {
   randomSeed(treeSeed);
   branchParams = [];
-  const maxDepth = parseInt(controls.depth.value);
-  const randomFactor = map(
-    parseInt(controls.randomness.value),
-    0,
-    10,
-    0,
-    1
-  );
+  updateCachedValues();
 
   // Calculate parameters for each depth level
-  for (let depth = 0; depth <= maxDepth; depth++) {
+  for (let depth = 0; depth <= cachedValues.maxDepth; depth++) {
     branchParams[depth] = [];
     // Pre-calculate more branches than needed to account for different depths
     const branchesAtDepth = pow(2, depth + 2);
     for (let i = 0; i < branchesAtDepth; i++) {
-      branchParams[depth].push(generateBranchParams(depth, randomFactor));
+      branchParams[depth].push(generateBranchParams(depth, cachedValues.randomness));
     }
   }
 }
 
 function setup() {
-  createCanvas(windowWidth * 0.8, windowHeight * 0.8);
-  textFont("Noto Sans SC", 16);
-  frameRate(60);
+  createCanvas(windowWidth * CONFIG.CANVAS.SCALE, windowHeight * CONFIG.CANVAS.SCALE);
+  textFont("Noto Sans SC", CONFIG.LEAF.SIZE);
+  frameRate(CONFIG.CANVAS.FRAME_RATE);
 
+  // Initialize controls with validation
   controls = {
     depth: document.getElementById("depth"),
     initialLength: document.getElementById("initialLength"),
     branchAngle: document.getElementById("branchAngle"),
     randomness: document.getElementById("randomness"),
     growthSpeed: document.getElementById("growthSpeed"),
+    leafColor: document.getElementById("leafColor"),
+    inkColor: document.getElementById("inkColor"),
+    leafChar: document.getElementById("leafChar")
   };
 
-  // Update value displays
-  Object.keys(controls).forEach((key) => {
-    const element = controls[key];
-    const valueDisplay = document.getElementById(key + "Value");
-    element.addEventListener("input", () => {
-      valueDisplay.textContent = element.value;
-    });
+  // Validate controls existence
+  Object.entries(controls).forEach(([key, element]) => {
+    if (!element) {
+      console.error(`Control element '${key}' not found!`);
+      return;
+    }
+    
+    // Special handling for color inputs and character select
+    if (key === 'leafColor' || key === 'inkColor' || key === 'leafChar') {
+      element.addEventListener("input", () => {
+        updateCachedValues();
+        redrawTree();
+      });
+    } else {
+      const valueDisplay = document.getElementById(key + "Value");
+      if (!valueDisplay) {
+        console.error(`Value display for '${key}' not found!`);
+        return;
+      }
+      element.addEventListener("input", () => {
+        valueDisplay.textContent = element.value;
+        updateCachedValues();
+      });
+    }
   });
 
   treeSeed = random(10000);
@@ -89,76 +175,68 @@ function setup() {
 }
 
 function windowResized() {
-  resizeCanvas(windowWidth * 0.8, windowHeight * 0.8);
+  resizeCanvas(windowWidth * CONFIG.CANVAS.SCALE, windowHeight * CONFIG.CANVAS.SCALE);
   redrawTree();
 }
 
-function drawBranch(
-  x,
-  y,
-  len,
-  angle,
-  depth,
-  width,
-  progress,
-  branchIndex = 0
-) {
+function drawBranch(x, y, len, angle, depth, width, progress, branchIndex = 0) {
   // Scale length and width based on growth progress
   len = len * min(1, progress);
   width = width * min(1, progress);
 
   if (depth === 0 || !branchParams[depth] || branchIndex >= branchParams[depth].length) {
-    // Draw '林' character at branch ends with gradual growth
-    if (progress > 0.1) { // Only start showing leaves after branch has started growing
-      let leafProgress = (progress - 0.1) * 1.2; // Normalize progress for leaves
+    // Draw character at branch ends with gradual growth
+    if (progress > CONFIG.LEAF.SHOW_THRESHOLD) {
+      let leafProgress = (progress - CONFIG.LEAF.SHOW_THRESHOLD) * CONFIG.GROWTH.CHILD_SCALE;
       if (leafProgress > 0) {
         push();
         translate(x, y);
         rotate(-angle);
         
         // Calculate size based on growth progress
-        let finalSize = 16;
-        let currentSize = finalSize * min(1, leafProgress * 2);
+        let currentSize = CONFIG.LEAF.SIZE * min(1, leafProgress * 2);
         textSize(currentSize);
         textAlign(CENTER, CENTER);
 
+        // Get current leaf color
+        const [r, g, b] = cachedValues.leafColor;
+        
         // Calculate alpha based on growth progress
-        let shadowAlpha = 50 * leafProgress;
-        let mainAlpha = 200 * leafProgress;
+        let shadowAlpha = CONFIG.LEAF.SHADOW_ALPHA * leafProgress;
+        let mainAlpha = CONFIG.LEAF.MAIN_ALPHA * leafProgress;
 
-        // Draw green shadow for depth effect
-        fill(34, 139, 34, shadowAlpha);
+        // Draw shadow for depth effect
+        fill(r, g, b, shadowAlpha);
         noStroke();
-        text("林", 1, 1);
+        text(cachedValues.leafChar, 1, 1);
 
         // Draw main character
-        fill(34, 139, 34, mainAlpha);
-        text("林", 0, 0);
+        fill(r, g, b, mainAlpha);
+        text(cachedValues.leafChar, 0, 0);
         pop();
       }
     }
     return;
   }
 
-  const params = branchParams[depth] ? branchParams[depth][branchIndex] : generateBranchParams(depth, map(parseInt(controls.randomness.value), 0, 10, 0, 1));
+  const params = branchParams[depth][branchIndex];
   push();
   translate(x, y);
 
   // Add ink texture effect using pre-calculated parameters
-  for (let i = 0; i < 3; i++) {
+  const [inkR, inkG, inkB] = cachedValues.inkColor;
+  
+  for (let i = 0; i < CONFIG.BRANCH.CURVES_COUNT; i++) {
     const curve = params.curves[i];
     let branchEndX = len * cos(-angle);
     let branchEndY = len * sin(-angle);
 
-    // Use pre-calculated variations
     branchEndX += width * curve.endX;
     branchEndY += width * curve.endY;
 
-    // Ink stroke effect
-    stroke(0, curve.alpha);
+    stroke(inkR, inkG, inkB, curve.alpha);
     strokeWeight(width * random(0.8, 1.2));
 
-    // Draw with pre-calculated curves
     let ctrl1X = len * curve.ctrl1X;
     let ctrl1Y = width * curve.ctrl1Y;
     let ctrl2X = len * curve.ctrl2X;
@@ -170,7 +248,7 @@ function drawBranch(
 
   // Add pre-calculated ink splatter effect
   params.splats.forEach((splat) => {
-    stroke(0, splat.alpha);
+    stroke(inkR, inkG, inkB, splat.alpha);
     strokeWeight(random(1, 2));
     point(len * splat.x, width * splat.y);
   });
@@ -178,38 +256,18 @@ function drawBranch(
   // Calculate next branches using pre-calculated parameters
   let newLen = len * params.length;
   let newWidth = width * params.width;
-  let branchAngle = radians(parseInt(controls.branchAngle.value));
 
   // Use pre-calculated angle variations
-  let leftAngle = angle + branchAngle + params.leftAngle;
-  let rightAngle = angle - branchAngle + params.rightAngle;
+  let leftAngle = angle + cachedValues.branchAngle + params.leftAngle;
+  let rightAngle = angle - cachedValues.branchAngle + params.rightAngle;
 
   // Recursively draw branches with consistent indices
-  // Only draw further branches if we have enough progress
-  if (progress > 0.1) {
+  if (progress > CONFIG.GROWTH.CHILD_DELAY) {
     translate(len * cos(-angle), len * sin(-angle));
-    let nextProgress = (progress - 0.1) * 1.2; // Delayed growth for child branches
+    let nextProgress = (progress - CONFIG.GROWTH.CHILD_DELAY) * CONFIG.GROWTH.CHILD_SCALE;
     if (nextProgress > 0) {
-      drawBranch(
-        0,
-        0,
-        newLen,
-        leftAngle,
-        depth - 1,
-        newWidth,
-        nextProgress,
-        branchIndex * 2
-      );
-      drawBranch(
-        0,
-        0,
-        newLen,
-        rightAngle,
-        depth - 1,
-        newWidth,
-        nextProgress,
-        branchIndex * 2 + 1
-      );
+      drawBranch(0, 0, newLen, leftAngle, depth - 1, newWidth, nextProgress, branchIndex * 2);
+      drawBranch(0, 0, newLen, rightAngle, depth - 1, newWidth, nextProgress, branchIndex * 2 + 1);
     }
   }
 
@@ -219,7 +277,7 @@ function drawBranch(
 function draw() {
   if (isGrowing) {
     let growthSpeed = parseInt(controls.growthSpeed.value);
-    growthProgress = min(1, growthProgress + 0.001 * growthSpeed);
+    growthProgress = min(1, growthProgress + CONFIG.GROWTH.SPEED_FACTOR * growthSpeed);
     if (growthProgress >= 1) {
       isGrowing = false;
     }
@@ -244,20 +302,21 @@ function redrawTree() {
   background(255);
 
   // Draw ground texture
-  stroke(0, 30);
-  for (let i = 0; i < width; i += 20) {
-    let y = height * 0.8 + random(-5, 5);
+  const [inkR, inkG, inkB] = cachedValues.inkColor;
+  stroke(inkR, inkG, inkB, 30);
+  for (let i = 0; i < width; i += CONFIG.GROUND.LINE_SPACING) {
+    let y = height * CONFIG.GROUND.HEIGHT_RATIO + random(-CONFIG.GROUND.VARIATION, CONFIG.GROUND.VARIATION);
     strokeWeight(random(0.5, 2));
-    line(i, y, i + random(10, 30), y + random(-5, 5));
+    line(i, y, i + random(10, 30), y + random(-CONFIG.GROUND.VARIATION, CONFIG.GROUND.VARIATION));
   }
 
   // Draw main tree
   drawBranch(
     width / 2,
-    height * 0.8,
+    height * CONFIG.GROUND.HEIGHT_RATIO,
     parseInt(controls.initialLength.value),
     PI / 2,
-    parseInt(controls.depth.value),
+    cachedValues.maxDepth,
     10,
     growthProgress
   );

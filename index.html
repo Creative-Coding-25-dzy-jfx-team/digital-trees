@@ -10,6 +10,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@100..900&display=swap" rel="stylesheet">
     <style>
         body {
+            font-family: 'Noto Sans SC', sans-serif;
             margin: 0;
             display: flex;
             justify-content: center;
@@ -53,22 +54,33 @@
             <label for="randomness">Randomness: <span id="randomValue">5</span></label>
             <input type="range" id="randomness" min="0" max="10" value="5">
         </div>
-        <button onclick="redrawTree()">Redraw Tree</button>
+        <div class="control-group">
+            <label for="growthSpeed">Growth Speed: <span id="speedValue">5</span></label>
+            <input type="range" id="growthSpeed" min="1" max="10" value="5">
+        </div>
+        <div class="control-group">
+            <button onclick="startGrowth()">Start Growth</button>
+            <button onclick="resetTree()">Reset</button>
+        </div>
     </div>
 
     <script>
         let controls;
         let chineseFont;
+        let growthProgress = 0;
+        let isGrowing = false;
         
         function setup() {
             createCanvas(windowWidth * 0.8, windowHeight * 0.8);
             textFont('Noto Sans SC', 16);
+            frameRate(60);
             
             controls = {
                 depth: document.getElementById('depth'),
                 initialLength: document.getElementById('initialLength'),
                 branchAngle: document.getElementById('branchAngle'),
-                randomness: document.getElementById('randomness')
+                randomness: document.getElementById('randomness'),
+                growthSpeed: document.getElementById('growthSpeed')
             };
 
             // Update value displays
@@ -88,7 +100,11 @@
             redrawTree();
         }
 
-        function drawBranch(x, y, len, angle, depth, width) {
+        function drawBranch(x, y, len, angle, depth, width, progress) {
+            // Scale length and width based on growth progress
+            len = len * min(1, progress);
+            width = width * min(1, progress);
+
             if (depth === 0) {
                 // Draw '林' character at branch ends
                 push();
@@ -98,12 +114,12 @@
                 textAlign(CENTER, CENTER);
                 
                 // Draw green shadow for depth effect
-                fill(34, 139, 34, 50);
+                fill(34, 139, 34, 50 * min(1, progress * 2));
                 noStroke();
                 text('林', 1, 1);
                 
                 // Draw main character
-                fill(34, 139, 34, 200);
+                fill(34, 139, 34, 200 * min(1, progress * 2));
                 text('林', 0, 0);
                 pop();
                 return;
@@ -162,11 +178,39 @@
             let rightAngle = angle - branchAngle + random(-0.5, 0.5) * randomFactor;
 
             // Recursively draw branches
-            translate(len * cos(-angle), len * sin(-angle));
-            drawBranch(0, 0, newLen, leftAngle, depth - 1, newWidth);
-            drawBranch(0, 0, newLen, rightAngle, depth - 1, newWidth);
+            // Only draw further branches if we have enough progress
+            if (progress > 0.1) {
+                translate(len * cos(-angle), len * sin(-angle));
+                let nextProgress = (progress - 0.1) * 1.2; // Delayed growth for child branches
+                if (nextProgress > 0) {
+                    drawBranch(0, 0, newLen, leftAngle, depth - 1, newWidth, nextProgress);
+                    drawBranch(0, 0, newLen, rightAngle, depth - 1, newWidth, nextProgress);
+                }
+            }
             
             pop();
+        }
+
+        function draw() {
+            if (isGrowing) {
+                let growthSpeed = parseInt(controls.growthSpeed.value);
+                growthProgress = min(1, growthProgress + (0.001 * growthSpeed));
+                if (growthProgress >= 1) {
+                    isGrowing = false;
+                }
+                redrawTree();
+            }
+        }
+
+        function startGrowth() {
+            isGrowing = true;
+            growthProgress = 0;
+        }
+
+        function resetTree() {
+            isGrowing = false;
+            growthProgress = 0;
+            redrawTree();
         }
 
         function redrawTree() {
@@ -187,7 +231,8 @@
                 parseInt(controls.initialLength.value),
                 PI/2,
                 parseInt(controls.depth.value),
-                10
+                10,
+                growthProgress
             );
         }
     </script>
